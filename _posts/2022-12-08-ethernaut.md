@@ -389,3 +389,67 @@ contract Attacker {
 What we do is first call the attack function passing a value higher than the current prize set in the King contract. This way, we'll become the king. Then, every trigger on the `receive()` function in the King contract will revert, because our Attacker contract is built so that it will revert with KINGSHIP NOT CLAIMED reason string each time it receives ether. Kind of a tricky game, but pretty fun!
 
 10th Ethernaut level completed ✅
+
+## 11. Reentrancy 🏃🏼
+>The goal of this level is for you to steal all the funds from the contract.
+> Things that might help:
+> - Untrusted contracts can execute code where you least expect it.
+> - Fallback methods
+> - Throw/revert bubbling
+> - Sometimes the best way to attack a contract is with another contract.
+> - See the Help page above, section "Beyond the console"
+
+This level exposes a typical reentrancy vulnerability. Reentrancy takes place when we can call a function again before its previous execution has finished. In this level, the main issue is found on withdraw (pretty common issue found in a lot of protocols):
+```solidity
+function withdraw(uint _amount) public {
+    if(balances[msg.sender] >= _amount) {
+      (bool result,) = msg.sender.call{value:_amount}("");
+      if(result) {
+        _amount;
+      }
+      balances[msg.sender] -= _amount;
+    }
+  }
+```
+
+As we can see, if `msg.sender` has enough balance, the `withdraw()` function will first transfer the amount specified by parameter to `msg.sender`, and then `msg.sender` balance will be decreased after sending the amount. The issue here is the order of events, as this piece of code is not following the Checks-Effects-Interactions pattern. The check-effects-interactions pattern states the correct order of events in any contract interaction:
+1. Checks: Is the input acceptable? If not, then either "Fail Early and fail hard" or return false.
+2. Effects: Update the contract to a new state
+3. Interactions: Perform any `.send()`, `.transfer()` and `.call()` as well as function calls to "untrusted" contracts.
+
+In the specific case of our `withdraw()` function, Checks would be checking that `msg.sender` has enough balance, Effects would be decreasing the `balances` mapping, and Interactions would be sending ether to `msg.sender`. The code from this level correcty performs Checks in the beginning, but as we can see it then triggers Interactions prior to Effects (it transfers ether before decreasing the `balances` mapping). How to take advantage of this issue? 
+
+As we've seen, reentrancy consists of executing a function before finishing its previous execution. We could call `withdraw()`, and when it transfers ether to `msg.sender` (which in this case will be our malicious contract) we could call `withdraw()` again. Because `balance` mapping is not decreased before triggering `withdraw()` again, we'll surpass the `balances[msg.sender] >= _amount` check infinitely, until the contract is completely drained.
+
+Our attacker contract could be something like this:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.4;
+
+interface IReentrance {
+    function withdraw(uint256 _amount) external;
+}
+
+contract Attacker {
+    IReentrance public immutable iReentrance;
+    constructor(address reentrance) {
+        iReentrance = IReentrance(reentrance);
+    }
+    function attack() public payable {
+        iReentrance.withdraw(msg.value);
+    }
+    // Allow receiving ether
+    receive() external payable{ 
+        iReentrance.withdraw(msg.value);
+    }
+}
+```
+
+So we'll first send deposit via `donate()` passing our attacker contract address as receiver in parameter, in order to at least have a minimum balance to surpass the first check in `withdraw()`:
+```javascript
+await contract.donate('0x72dAe46302cB146526207A1ED76eb509F70C76D5', {value: toWei('0.001')})
+```
+After that, all is left to the magical `receive()` function inside our contract. Considering the contract balance initially is 0.001 ether, if we trigger `withdraw()` passing 0.001 as the amount to withdraw, we'll need two reentrant iterations to draing the contract. You can check [my transaction](https://goerli.etherscan.io/tx/0xa5bee70bac82775511bafd37ce4db2d18696060f23c29b783378fad988886419) on goerli to see the reentrant internal txns. And thats all, contract drained! How malicious of us!🤓 
+
+11th Ethernaut level completed ✅
