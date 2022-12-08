@@ -62,7 +62,7 @@ In Solidity, fallback functions `receive()` and `fallback()` are used in two dif
 - `fallback()`: contract received data but no function matched the function called, or contract received ether but no `receive()` function was found. Optionally `payable`.
 
 Here's an easy diagram to better understand how receive and fallback work:
-![diagram]()
+![diagram](https://github.com/0xadrii/0xadrii.github.io/blob/main/images/fallback_receive.png)
 
 Knowing this, we can contribute a small amount of ether via `contribute()` in order to bypass the `contributions[msg.sender] > 0` check:
 ```javascript
@@ -81,6 +81,7 @@ We'll see we are the owners now. The requirements for completing the level were 
 await contract.withdraw();
 ```
  Second Ethernaut level completed ✅
+
 
 ## 3. Fallout 1️⃣
 > Claim ownership of the contract below to complete this level.
