@@ -240,3 +240,37 @@ await contract.transfer("0x0000000000000000000000000000000000000000", 21);
 ```
 
 Sixth Ethernaut level completed ✅
+
+## 7. Delegation 🚪
+> The goal of this level is for you to claim ownership of the instance you are given.
+>
+>Things that might help
+>
+> - Look into Solidity's documentation on the delegatecall low level function, how it works, how it can be used to delegate operations to on-chain libraries, and what implications it has on execution scope.
+> - Fallback methods
+> - Method ids
+
+Claiming ownership again, this time delegatecalling! In this level, we have to contracts:
+- Delegate contract: a contract just having an owner variable and a `pwn()` method, which sets the contract owner to msg.sender
+- Delegation: a contract with a fallback function delegatecalling to the Delegate contract address
+
+In order to claim ownership of the Delegation contract, we need to understand what `delegatecall` is. In Solidity, `delegatecall` allows the caller contract to execute the callee's logic in the caller's contract context. If contract A delegatecalls to contract B, contract A's storage will be affected by executing contract B's logic. In our case, we see that Delegation contract (contract A) delegatecalls to Delegate contract (contract B). This means we can execute the `pwn()` function from Delegate contract in Delegation's contract context, thus setting Delegation's owner to be ourselves (msg.sender).  
+> (Note: because owner variables are stored in slot 0 of both Delegation and Delegate contracts, this approach will work for us. This is due to how storage works in Solidity, but NOT due to the variable names. If owner variables where placed in different slots on both contracts, this approach would not work. You can learn more about Solidity storage in the [Solidity official documentation](https://docs.soliditylang.org/en/v0.8.17/internals/layout_in_storage.html)).
+
+If you remember [fallback](#2-fallback-💰) level, the fallback function is a special function executed when contract received data but no function matched the function called. Checking the code we are provided with, if the fallback function is executed in the Delegation contract, it will forward the `msg.data` (the data referencing function we want to call) to Delegate contract:
+``` solidity
+fallback() external {
+    (bool result,) = address(delegate).delegatecall(msg.data);
+    if (result) {
+      this;
+    }
+  }
+```
+
+We reach the conclusion that what we want to do here is to call the `pwn()` function to Delegation contract. This will trigger the fallback function, which will delegatecall `pwn()` as `msg.data` to Delegate contract, thus changing our Delegation owner storage variable to `msg.sender`. We can do this in the Ethernaut's browser console just like this:
+```javascript
+await contract.sendTransaction({data: "0xdd365b8b"});
+``` 
+> Note: We are using the `pwn()` function selector for easiness in the Ethernaut console. Function selectors take first 4 bytes of keccak256 of the function selector (in our case, we use keccak256("pwn()") first 4 bytes, which is 0xdd365b8b). You can read more about function selectors [here](https://solidity-by-example.org/function-selector/).
+
+Seventh Ethernaut level completed ✅
