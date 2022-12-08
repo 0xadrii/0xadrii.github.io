@@ -57,7 +57,6 @@ receive() external payable {
     owner = msg.sender;
   }
 ````
-
 In Solidity, fallback functions `receive()` and `fallback()` are used in two different ways: 
 - `receive()`: contract received ether and no data. If `receive()` does not exist in the contract, `fallback()` will be triggered. Forced to be `payable`.
 - `fallback()`: contract received data but no function matched the function called, or contract received ether but no `receive()` function was found. Optionally `payable`.
