@@ -11,7 +11,9 @@ This is a write-up for The Ethernaut CTF collection of challenges. The Ethernaut
 > This level walks you through the very basics of how to play the game.
 
 This level exposes the basics in order to play the Ethernaut. `contract.info()` returns info from the 
-contract. We receive: 'You will find what you need in info1().' `contract.info1()` returns 'Try info2(), but with "hello" as a parameter.' We already see a pattern where info methods will return instructions for nexts steps. In security, we need to be fast and work smart, not hard. We can use `contract.methods`, which returns all the methods for the contract. After checking all contract methods, see the `password()` method and the `authenticate()` method (which takes a string as param). We deduce that `password()` will return the parameter needed to authenticate ourselves via `authenticate()`. So we first run `password()`, which returns ethernaut0. We then call `authenticate()` with ethernaut0 as param and... voilà! First Ethernaut level completed ✅
+contract. We receive: 'You will find what you need in info1().' `contract.info1()` returns 'Try info2(), but with "hello" as a parameter.' We already see a pattern where info methods will return instructions for nexts steps. In security, we need to be fast and work smart, not hard. We can use `contract.methods`, which returns all the methods for the contract. After checking all contract methods, see the `password()` method and the `authenticate()` method (which takes a string as param). We deduce that `password()` will return the parameter needed to authenticate ourselves via `authenticate()`. So we first run `password()`, which returns ethernaut0. We then call `authenticate()` with ethernaut0 as param and... voilà!  
+
+1st Ethernaut level completed ✅
 
 ## 2. Fallback 💰
 > Look carefully at the contract's code below.
@@ -80,7 +82,7 @@ We'll see we are the owners now. The requirements for completing the level were 
 ```javascript
 await contract.withdraw();
 ```
- Second Ethernaut level completed ✅
+2nd Ethernaut level completed ✅
 
 
 ## 3. Fallout 1️⃣
@@ -106,7 +108,7 @@ await contract.Fal1out({value: toWei("0.00000001")})
 ```
 This level is a quckly reminder of how important it is to be fully focused and don't let ourselves be guided by comments when auditing code.
 
-Third Ethernaut level completed ✅
+3rd Ethernaut level completed ✅
 
 ## 4. Coin Flip 🪙
 >This is a coin flipping game where you need to build up your winning streak by guessing the outcome of a coin flip. To complete this level you'll need to use your psychic abilities to guess the correct outcome 10 times in a row.
@@ -168,7 +170,7 @@ contract Attacker {
 ```
 
 Then, we can call `attack()` 10 times (making sure we call it in a different block from the one in the previous transaction) and we'll flip the coin correctly 10 straigth times! We could also automate this using ethers.js and looping for 10 times, interacting with the contract every time a block is added to the blockchain to surpass the contract's block check.
-Fourth Ethernaut level completed ✅
+4th Ethernaut level completed ✅
 
 ## 5. Telephone 📞
 > Claim ownership of the contract below to complete this level.
@@ -207,7 +209,7 @@ contract Attacker {
 ```
 This way, tx.origin will be our EOA account, while msg.sender will be our newly crafted contract's account.
 
-Fifth Ethernaut level completed ✅
+5th Ethernaut level completed ✅
 ## 6. Token 💎
 > The goal of this level is for you to hack the basic token contract below.
 >
@@ -239,7 +241,7 @@ In Solidity versions equal or higher to 0.8, this issue is handled by Solidity i
 await contract.transfer("0x0000000000000000000000000000000000000000", 21);
 ```
 
-Sixth Ethernaut level completed ✅
+6th Ethernaut level completed ✅
 
 ## 7. Delegation 🚪
 > The goal of this level is for you to claim ownership of the instance you are given.
@@ -273,7 +275,7 @@ await contract.sendTransaction({data: "0xdd365b8b"});
 ``` 
 > Note: We are using the `pwn()` function selector for easiness in the Ethernaut console. Function selectors take first 4 bytes of keccak256 of the function selector (in our case, we use keccak256("pwn()") first 4 bytes, which is 0xdd365b8b). You can read more about function selectors [here](https://solidity-by-example.org/function-selector/).
 
-Seventh Ethernaut level completed ✅
+7th Ethernaut level completed ✅
 
 ## 8. Force 🛣
 > Some contracts will simply not take your money ¯\_(ツ)_/¯
@@ -317,7 +319,7 @@ contract Attacker {
 ```
 And we're done! Triggering `attack()` will send Attacker contract's funds to Force contract and make us pass the level!
 
-Eighth Ethernaut level completed ✅
+8th Ethernaut level completed ✅
 
 ## 9. Vault 🏦
 > Unlock the vault to pass the level!
@@ -353,4 +355,37 @@ After running the command, we see the result for the password is 0x4120766572792
 ``` javascript
 await contract.unlock("0x412076657279207374726f6e67207365637265742070617373776f7264203a29")
 ```
-Nineth Ethernaut level completed ✅
+9th Ethernaut level completed ✅
+
+## 10. King 👑
+>The contract below represents a very simple game: whoever sends it an amount of ether that is larger than the current prize becomes the new king. On such an event, the overthrown king gets paid the new prize, making a bit of ether in the process! As ponzi as it gets xD
+>
+>Such a fun game. Your goal is to break it.
+>
+>When you submit the instance back to the level, the level is going to reclaim kingship. You will beat the level if you can avoid such a self proclamation.
+
+As the level introduction says, our goal for this level is to avoid the contract to reclaim kingship of the level when we submit the instance. The level will try to trigger the `receive()` function when we submit the instance, and we need make that transaction revert. 
+
+The `receive()` function will first check that the `msg.value` is higher than the current prize (it also has the `msg.sender == owner` in order to allow the level instance to reclaim kingship via the receive function without having to send funds, because owner is set to the level instance address in the constructor). After that, the transaction value will be transferred to the previous king, the new king will be set to `msg.sender`, and `msg.value` will be the new prize. 
+
+As we have learnt in the past levels, transfers of ether are handled by contracts via `receive()` and `fallback()` functions. Because we want the level to never be able to reclaim kingship when we submit the instance, we could reclaim kingship first with a contract that reverts always when receiving funds. We can easily do this by setting up a contract that always reverts when triggering its fallback function. An example of such a contract could be:
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.4;
+
+contract Attacker {
+
+    function attack(address receiver) external  payable{
+        (bool success, ) = receiver.call{value: msg.value}("");
+        require(success, "KINGSHIP NOT CLAIMED");
+    }
+    // Allow receiving ether
+    receive() external payable{
+        revert();
+    }
+}
+```
+
+What we do is first call the attack function passing a value higher than the current prize set in the King contract. This way, we'll become the king. Then, every trigger on the `receive()` function in the King contract will revert, because our Attacker contract is built so that it will revert with KINGSHIP NOT CLAIMED reason string each time it receives ether. Kind of a tricky game, but pretty fun!
+
+10th Ethernaut level completed ✅
