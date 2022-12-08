@@ -274,3 +274,47 @@ await contract.sendTransaction({data: "0xdd365b8b"});
 > Note: We are using the `pwn()` function selector for easiness in the Ethernaut console. Function selectors take first 4 bytes of keccak256 of the function selector (in our case, we use keccak256("pwn()") first 4 bytes, which is 0xdd365b8b). You can read more about function selectors [here](https://solidity-by-example.org/function-selector/).
 
 Seventh Ethernaut level completed ✅
+
+## 8. Force 🛣
+> Some contracts will simply not take your money ¯\_(ツ)_/¯
+> The goal of this level is to make the balance of the contract greater than zero.
+> Things that might help:
+>
+> - Fallback methods
+> - Sometimes the best way to attack a contract is with another contract.
+> - See the Help page above, section "Beyond the console"
+
+In this level, we see an empty contract which we need to increase the balance of. As we previously learnt, in order to send funds to a contract it must have a `receive()` or `fallback()` method. How can we approach this if this contract has none of them?
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract Force {/*
+
+                   MEOW ?
+         /\_/\   /
+    ____/ o o \
+  /~____  =ø= /
+ (______)__m_m)
+
+*/}
+```
+The only way to force sending funds to a contract that can't receive ether is via `selfdestruct()`. Selfdestruct method will destroy the contract executing it, and will send all the contract's funds to the address specified as parameter. Knowing this, we can create a contract, send it some ether and selfdestruct it, passing the Force contract address as the funds receiver. This way, we'll increase the balance of Fund contract without it requiring `receive()` nor `fallback()`. An example contract to do so would be:
+``` solidity
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.4;
+
+contract Attacker {
+
+    function attack(address payable receiver) external {
+        selfdestruct(receiver);
+    }
+    // Allow receiving ether
+    receive() external payable{
+
+    }
+}
+```
+And we're done! Triggering `attack()` will send Attacker contract's funds to Force contract and make us pass the level!
+
+Eighth Ethernaut level completed ✅
