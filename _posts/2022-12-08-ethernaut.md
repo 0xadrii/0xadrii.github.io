@@ -348,7 +348,7 @@ contract Vault {
 The password passed as parameter must be equal to the `password` variable, which is private and its value is set on the constructor. We could think that the fact that `password` variable is private won't allow us to read its value. This is not true. Any contract code deployed to the blockchain can be read/viewed by anyone. In this case, the constructor sets the password value, so even if `password` is private we'll be able to read it because of this "everything is public" blockchain characteristic.  
 
 Password is stored in storage slot 1, so in order to read its value we just need to use cast's tool to [read storage variables through the cli](https://book.getfoundry.sh/reference/cast/cast-storage). We need to pass an address, storage slot and rpc url to read the storage slot value. As easy as that!
-```javascript
+```bash
 cast storage 0xDD381622461EAbba4906a767123f6460C328f806 1 --rpc-url YOUR_RPC_URL
 ```
 After running the command, we see the result for the password is 0x412076657279207374726f6e67207365637265742070617373776f7264203a29 . We can now trigger `unlock` and pass this ass parameter to unlock the contract!
@@ -513,5 +513,65 @@ After calling the `goTo()` function in our malicious contract, the `goTo()` funt
 12th Ethernaut level completed ✅
 
 
+## 13. Privacy 🥷🏻
+>The creator of this contract was careful enough to protect the sensitive areas of its storage.
+>
+>Unlock this contract to beat the level.
+>
+>Things that might help:
+>
+> - Understanding how storage works
+> - Understanding how parameter parsing works
+> - Understanding how casting works
+> Tips:
+>
+> - Remember that metamask is just a commodity. Use another tool if it is presenting problems. Advanced gameplay could involve using remix, or your own >web3 provider.
 
+In order to surpass this level, we need to unlock the contract, setting the `locked` variable to false. This can be done calling the `unlock()` function, where we pass a 16-byte key as parameter, and it needs to be equal to `bytes16(data[2])`. Just as the first level indications state, it is really important for this level to understand how storage works in solidity. (I recommend checking [Solidity's official documentation](https://docs.soliditylang.org/en/v0.8.17/internals/layout_in_storage.html) to understand storage better). Knowing this, let's get to work!  
 
+The contract has some variables declared in the beginning. Most of them are just bothering us, because in order to unlock the contract we just need the `data` array. We first want to know what value is stored in `data[2]`, but it is a private variable. We'll do the same we did in the Vault level, where we learnt that even if a variable is private we can access its data by reading directly from the storage. So we first need to determine the storage slot of `data[2]`:
+```solidity
+  bool public locked = true; //SLOT 0
+  uint256 public ID = block.timestamp; //SLOT 1
+  uint8 private flattening = 10; //SLOT 2
+  uint8 private denomination = 255; //SLOT 2
+  uint16 private awkwardness = uint16(block.timestamp); //SLOT 2
+  bytes32[3] private data; // data[0] -> SLOT 3, data[1] -> SLOT 4, data[2] -> SLOT 5
+```
+
+As we can see, `data[2]` is stored in slot 5. This is because `flattening`, `denomination`, and `awkwardness` are packed in the same slot (slot 2) due to their byte length, and because fixed-sized arrays like `data` store their data in contiguous storage slots.  
+
+Now that we know what `data[2]`'s slot is, we can access it using `cast`:
+
+``` bash
+cast storage 0xb7e7fa9Aaca3496e0a57E248d5a5B1ACf23009c5 5 --rpc-url YOUR_RPC_URL
+```
+After executing the command, we know that the value stored for `data[2]` is 0x2595c375b22b22265e0a4cb1c5abafc56750d67e1e044ece3c49db65de046921.
+
+The last thing we need to do is understand is how casting works in solidity, because we have the full 32-byte value stored in `data[2]` but the `unlock()` function checks whether the `_key` we pass as parameter is equal to `bytes16(data[2])`:
+```solidity
+function unlock(bytes16 _key) public {
+  require(_key == bytes16(data[2]));
+  locked = false;
+}
+```
+I can't recommend enough [this amazing writeup](https://betterprogramming.pub/solidity-tutorial-all-about-conversion-661130eb8bec) on type-casting, done by [Jean Cvllr](https://github.com/CJ42). This article explains all kinds of conversions between solidity types, as well as the difference between implicit and explicit conversions. In order to surpass this level, I recommend reading the Conversion between bytesN section.  
+
+Basically, converting to a smaller bytes range will discard the right-most bytes. In our case, we are converting from `bytes32` to `bytes16`, so the right-most 16 bytes (32 bytes from the original data[2] - 16 bytes from the cast) will be removed:
+
+```solidity
+// Initial data[2] value: 
+0x2595c375b22b22265e0a4cb1c5abafc56750d67e1e044ece3c49db65de046921
+
+// bytes16(data[2]) (discarding the right-most 16 bytes)
+0x2595c375b22b22265e0a4cb1c5abafc5
+```
+
+We found the key! Now we only need to call the `unlock()` function passing the 0x2595c375b22b22265e0a4cb1c5abafc5 value as the key and the contract will be unlocked! 
+``` javascript
+  await contract.unlock("0x2595c375b22b22265e0a4cb1c5abafc5");
+```
+
+Congrats, you just stepped up your Solidity game!😎
+
+13th Ethernaut level completed ✅
