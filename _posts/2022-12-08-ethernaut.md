@@ -777,8 +777,10 @@ There's a specific case where `extcodesize` will return a number equal to 0 even
   0 ^ b = a ^ c
   b = a ^ c
   ```
-  So we know that `uint64(bytes8(keccak256(abi.encodePacked(msg.sender))))` ^ `type(uint64).max` = `uint64(_gateKey)`. We can just add this in our malicious contract in order to find out the gate key, considering that `msg.sender` will be our contract's address (because it will be the account executing the transaction). Our malicious contract finally looks something like this:
-  ```solidity
+  So we know that `uint64(bytes8(keccak256(abi.encodePacked(msg.sender))))` ^ `type(uint64).max` = `uint64(_gateKey)`. We can just add this in our malicious contract in order to find out the gate key, considering that `msg.sender` will be our contract's address (because it will be the account executing the transaction). Our malicious contract finally looks something like this: 
+
+  
+  ``` solidity
   // SPDX-License-Identifier: MIT
   pragma solidity 0.8.17;
   interface IGatekeeperTwo {
@@ -793,7 +795,7 @@ There's a specific case where `extcodesize` will return a number equal to 0 even
         IGatekeeperTwo(_gatekeeperTwo).enter(gateKey);
       }
   
-  }
+  } 
   ``` 
 
 15th Ethernaut level completed ✅
