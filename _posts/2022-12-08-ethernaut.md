@@ -861,3 +861,146 @@ await contract.transferFrom("0x28D9F73D4Ce4ce594b2B231714b03139ad74F3C1", "0x1a4
 ```
 16th Ethernaut level completed ✅
 
+
+## 16. Preservation 🛡
+> This contract utilizes a library to store two different times for two different timezones. The constructor creates two instances of the library for each time to be stored.
+> 
+> The goal of this level is for you to claim ownership of the instance you are given.
+> 
+> Things that might help
+> - Look into Solidity's documentation on the delegatecall low level function, how it works, how it can be used to delegate operations to on-chain. libraries, and what implications it has on execution scope.
+> - Understanding what it means for delegatecall to be context-preserving.
+> - Understanding how storage variables are stored and accessed.
+> - Understanding how casting works between different data types.
+
+Our goal for this Ethernaut level is to take ownership of the `Preservation` contract. Initially we  see two instances of the `LibraryContract` being passed in the constructor.  The goal of the `Preservation` contract is to  store two different times using `setFirstTime()` and `setSecondTime()` methods, and each of these functions sets the time by interacting with the  `LibraryContract` instances passed in the constructor and delegatecalling the `setTime()` logic  to them:
+
+```solidity
+pragma solidity ^0.8.0;
+
+contract Preservation {
+
+  // public library contracts 
+  address public timeZone1Library;
+  address public timeZone2Library;
+  address public owner; 
+  uint storedTime;
+  // Sets the function signature for delegatecall
+  bytes4 constant setTimeSignature = bytes4(keccak256("setTime(uint256)"));
+
+  constructor(address _timeZone1LibraryAddress, address _timeZone2LibraryAddress) {
+    timeZone1Library = _timeZone1LibraryAddress; 
+    timeZone2Library = _timeZone2LibraryAddress; 
+    owner = msg.sender;
+  }
+ 
+  // set the time for timezone 1
+  function setFirstTime(uint _timeStamp) public {
+    timeZone1Library.delegatecall(abi.encodePacked(setTimeSignature, _timeStamp));
+  }
+
+  // set the time for timezone 2
+  function setSecondTime(uint _timeStamp) public {
+    timeZone2Library.delegatecall(abi.encodePacked(setTimeSignature, _timeStamp));
+  }
+}
+
+// Simple library contract to set the time
+contract LibraryContract {
+
+  // stores a timestamp 
+  uint storedTime;  
+
+  function setTime(uint _time) public {
+    storedTime = _time;
+  }
+}
+```
+In the Delegation Ethernaut level we learnt about how storage works in solidity (if you didn't read it yet, I recommend going through it first or checking [this awesome resource from Solidity documentation](https://docs.soliditylang.org/en/v0.8.17/internals/layout_in_storage.html)). We also learnt about type casting in the Privacy Ethernaut level, (I also recommend you going through it or checking [this amazing article about type-casting](https://betterprogramming.pub/solidity-tutorial-all-about-conversion-661130eb8bec)), because this level is all about how storage works, how we can use delegatecall to our benefit, and how type-casting works in solidity. Time to get our hands dirty!
+
+Basically, we have **two main goals** in this level: 
+1. setting `Preservation`s `timeZone1Library` to be an address of a malicious contract controlled by us
+2. creating the malicious contract mentioned in the first goal in a way that allows us to set the ownership of `Preservation` to our own address. 
+
+Let's approach our first main goal: 
+
+As we can see, the `LibraryContract`'s `setTime()` function will always be writing the `_time` parameter passed to the uint `storedTime` variable (more precisely, it will always be **writing to the `storedTime` variable slot**, which in the case of the `LibraryContract` is slot 0): 
+
+```solidity
+pragma solidity ^0.8.0;
+contract LibraryContract {
+
+  // stores a timestamp 
+  uint storedTime; // SLOT 0
+
+  function setTime(uint _time) public {
+    storedTime = _time;
+  }
+}
+
+```
+This means that delegatecalling to `LibraryContract` and calling the `setTime()` method will result in always overriding the caller contract's 0 slot due to how storage and delegate call works in Solidity. Because of this, the `Preservation` contract will get its slot 0 overriden after delegatecalling to `LibraryContract` in its `setFirstTime()` function. If we check what's stored in`Preservation`'s slot 0 we see that `timeZone1Library` library will be overridden after executing the mentioned delegate call, because it is the variable stored in slot 0 in:
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.0;
+
+contract Preservation {
+
+  address public timeZone1Library; // SLOT 0 <----- this slot will be overridden after delegatecalling to `LibraryContract`'s `setTime` function
+  address public timeZone2Library; // SLOT 1
+  address public owner; // SLOT 2 <----- this is the slot we want to override
+
+  ...
+```
+So basically we'll be able to modify the `timeZone1Library`'s stored address in `Preservation` and set it to be an address of a malicious contract crafted by us! But we have a small problem: the `LibraryContract`'s slot 0 variable is a uint, and we want to set it to be an address because we want it to become the address of our malicious contract. This means that in order to be able to set the address of the malicious contract we need to pass its address in the form of a uint256, and later solidity will cast it to an address. How will this impact the data we are passing? As [the "how casting works in Solidity" article says](https://betterprogramming.pub/solidity-tutorial-all-about-conversion-661130eb8bec), prior to Solidity 0.8.0 (up to Solidity 0.7.6) it was possible to convert explicitly any integer type uintN to an address (via casting). Since Solidity 0.8.0, explicit conversion between integers and address types is only allowed with uint160.
+So when we call `setTime()`, we'll need to pass the data in the `_time` parameter (which is a uint256) in a way that prevents us to lose information when casting from uint256 to uint160. In Solidity, converting to a smaller type will result in a loss of information in the leftmost bits:
+```solidity
+uint32 a = 0x12345678;
+uint16 b = uint16(a); // b = 0x5678, the 16 leftmost bits have been lost
+```
+So we want to place our data so that the rightmost 160 bits contain the value of the address of the malicious contract we have crafted and that we want to store. 
+
+Ok, we have updated the address of `timeZone1Library` inside `Preservation` and we now know that all delegatecalls done from `Preservation`'s `setFirstTime()` function will be delegatecalled to our malicious contract. Let's now approach our second goal for the level, which is defining how the malicious contract should do to allow us to update the ownership.
+
+What we really want is to update the storage slot 2 of the `Preservation` contract, so our malicious contract could have 3 variables (the first one stored in slot 0, the second one stored in slot 1, and the last one stored in slot 2) and a fake `setTime()` function that `Preservation` will delegatecall to. The `setTime()` function could then set the value passed as parameter to be equal to the third variable declared in the contract, thus modifying the storage slot 2 of the caller contract.  After that, every call to `setFirstTime()` will result in a delegatecall to our malicious contract, which means that we will be able to force `Preservation` to execute a custom and maliciously crafted logic that allows us to set the `owner` variable to our address.
+> Note: we need to remember that `setTime()` has uint256 as parameter, so when setting the `owner` variable we'll also need to consider arranging its data so that casting from uint256 to uint160 doesn't lose data. 
+We finally have a contract that looks like this:
+
+```solidity
+// SPDX-License-Identifier: MIT
+pragma solidity 0.8.17;
+
+contract Attacker {
+    uint256 variable1;
+    uint256 variable2;
+    address owner;
+
+    function setTime(uint256 _time) public {
+        owner = address(uint160(_time));
+  }
+ 
+}
+```
+
+Tough part done! Now we just need to first call `Preservation`'s `setFirstTime` function, passing our contract's address as parameter (note that the original contract address is 0x574832AB611b96104e731223269Ce1a6e07289D0, but we add zeroes to the 12 leftmost bytes (0x000000000000000000000000574832AB611b96104e731223269Ce1a6e07289D0) to avoid loss of information when casting from uint256 to uint160 and then to address):
+```javascript
+await contract.setFirstTime("0x000000000000000000000000574832AB611b96104e731223269Ce1a6e07289D0");
+```
+And if we wait for the tx to finish, `timeZone1Library` will now become our malicious contract:
+```javascript
+await contract.timeZone1Library()
+//Result: '0x574832AB611b96104e731223269Ce1a6e07289D0'
+```
+After that, we call `Preservation`'s `setFirstTime` function again with the owner address (in my case 0x28D9F73D4Ce4ce594b2B231714b03139ad74F3C1) as param (and also padded with zeroes on the left, so 0x000000000000000000000000028D9F73D4Ce4ce594b2B231714b03139ad74F3C1). This will delegatecall to our malicious contract's `setTime()` function and update `Preservation`'s owner:
+```javascript
+await contract.setFirstTime("0x000000000000000000000000028D9F73D4Ce4ce594b2B231714b03139ad74F3C1");
+```
+And if we check the owner:
+```javascript
+await contract.owner()
+// Result: '0x28D9F73D4Ce4ce594b2B231714b03139ad74F3C1'
+```
+Ownership claimed!
+
+17th Ethernaut level completed ✅
+
